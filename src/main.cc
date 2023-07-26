@@ -3,14 +3,14 @@
 #define FMT_HEADER_ONLY
 #include <fmt/core.h> 
 #include <glm/glm.hpp>
-
+#include <glm/ext/matrix_clip_space.hpp>
 #include <vector>
 
 const int window_width  = 1920;
 const int window_height = 1080;
 
 // camera (perspective)
-const float fov = 90.0f;
+const float g_fov = 90.0f;
 const float aspect_ratio = static_cast<float>(window_width) / static_cast<float>(window_height);
 const float z_near = 0.5f;
 const float z_far = 10000.0f;
@@ -35,8 +35,6 @@ const int random_count =  particle_count * 100;
 const int attractor_count = 8;
 
 #define INVALID_SHADER_PROGRAM_ID 0
-
-
 
 #include <iostream>
 #include <fstream>
@@ -83,11 +81,9 @@ static void check_for_errors(int shader_id)
     }
 }
 
-static int create_shader_program(const char* vertex_path, const char* fragment_path)
+static int create_point_shader_program(const char* vertex_path, const char* fragment_path)
 {
     const uint32_t shader_program = glCreateProgram();
-
-    int shader_program_id = INVALID_SHADER_PROGRAM_ID;
 
     int vertex_shader_id   = glCreateShader(GL_VERTEX_SHADER);
     int fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
@@ -98,22 +94,38 @@ static int create_shader_program(const char* vertex_path, const char* fragment_p
     glShaderSource(vertex_shader_id, 1, &vertex_shader_c_str, NULL);
     glCompileShader(vertex_shader_id);
     check_for_errors(vertex_shader_id);
+    glAttachShader(shader_program, vertex_shader_id);
 
-    // compile fragment shader.
+// compile fragment shader.
     std::string fragment_shader_src = file_to_string(fragment_path);
     const char* fragment_shader_c_str = fragment_shader_src.c_str();
     glShaderSource(fragment_shader_id, 1, &fragment_shader_c_str, NULL);
     glCompileShader(fragment_shader_id);
     check_for_errors(fragment_shader_id);
+    glAttachShader(shader_program, fragment_shader_id);
 
+    glLinkProgram(shader_program);
 
-    return shader_program_id;
+    return shader_program;
 }
 
-static int compile_compute_shader(const char* compute_path)
+static int create_compute_shader_program(const char* compute_path)
 {
-    fmt::print("[warning] function {} not implemented yet! \n", __func__);
-    return INVALID_SHADER_PROGRAM_ID;
+    const uint32_t shader_program = glCreateProgram();
+
+    int compute_shader_id = glCreateShader(GL_COMPUTE_SHADER);
+
+    // compile compute shader
+    std::string compute_shader_src = file_to_string(compute_path);
+    const char* compute_shader_c_str = compute_shader_src.c_str();
+    glShaderSource(compute_shader_id, 1, &compute_shader_c_str, NULL);
+    glCompileShader(compute_shader_id);
+    check_for_errors(compute_shader_id);
+    glAttachShader(shader_program, compute_shader_id);
+
+    glLinkProgram(shader_program);
+
+    return shader_program;
 }
 
 
@@ -151,9 +163,16 @@ int main() {
         glViewport(0, 0, window_width, window_height);
     }
 
-    int compute_shader = compile_compute_shader("");
-    int shader_program = create_shader_program("shaders/color_shader.vert", "shaders/color_shader.frag");
+    int compute_shader = create_compute_shader_program("shaders/particle.comp");
+    int shader_program = create_point_shader_program("shaders/particle.vert", "shaders/particle.frag");
     fmt::print("compute shader: {}\n", compute_shader);
+    glm::mat4 perspective = glm::perspective(g_fov, aspect_ratio,z_near,z_far);
+
+    glUseProgram(shader_program);
+
+
+    
+
 
     while (!glfwWindowShouldClose(window))
     {

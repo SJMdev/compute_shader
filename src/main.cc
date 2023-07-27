@@ -52,6 +52,7 @@ int rendered_frames = 0;
 double frame_time = 0.0;
 double counter = 0.0;
 double fps = 0.0;
+uint32_t VAO;
 
 // compute shader
 const int workgroup_size = 128;
@@ -174,6 +175,8 @@ static void simulate(
 
     // update the attractors.
 
+
+    //@FIXME: we do not update attractor positions at this time. I just want to see some points.
     glBindBuffer(GL_ARRAY_BUFFER, attractor_buffer);
     // modify gpu-based buffer, whatever was in there can be discarded.
     glm::vec4* attractor_buffer_ptr = (glm::vec4*)glMapBufferRange(GL_ARRAY_BUFFER, 0, attractor_count*sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
@@ -201,23 +204,25 @@ static void simulate(
         glDispatchCompute(particle_count / workgroup_size, 1, 1);
         glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glUseProgram(0);
+
+        //@debug: read back data from the shader.
+        // glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
+        // glm::vec3* gpu_buffer_ptr = (glm::vec3*)glMapBuffer(GL_ARRAY_BUFFER, GL_READ_ONLY);
+        // for (size_t idx = 0; idx != particle_count; ++idx)
+        // {
+        //     fmt::print("vec3: {}, {} {}\n", gpu_buffer_ptr[idx].x, gpu_buffer_ptr[idx].y, gpu_buffer_ptr[idx].z);
+        // }
+        glUnmapBuffer(GL_ARRAY_BUFFER);
     }
     //@TODO: does the simulation not actually update the position_buffer?
     // or the lifetime buffer?
     // check before and after!
-
-
     {
         glUseProgram(particle_shader_id);
         glEnable(GL_CULL_FACE);
         glBindBuffer (GL_ARRAY_BUFFER, position_buffer);
         // default VAO?
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
-        glBindBuffer(GL_ARRAY_BUFFER, lifetime_buffer);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(float), 0);
-
+        glBindVertexArray(VAO);
         glDrawArrays(GL_POINTS, 0, particle_count);
     }
 
@@ -273,8 +278,8 @@ int main() {
             return -1;
         }
 
-        // set the window region to the whole screen.
-        glViewport(0, 0, window_width, window_height);
+        // enable vsync
+        glfwSwapInterval(1);
     }
 
     // gl init 
@@ -285,8 +290,11 @@ int main() {
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE);
         glDisable(GL_CULL_FACE);
-    }
 
+        // set the window region to the whole screen.
+        glViewport(0, 0, window_width, window_height);
+
+    }
 
     int compute_shader  = create_compute_shader_program("shaders/particle.comp");
     int particle_shader = create_point_shader_program("shaders/particle.vert", "shaders/particle.frag");
@@ -307,7 +315,6 @@ int main() {
         glUniformMatrix4fv(view_matrix_uniform_location,      1, GL_FALSE, glm::value_ptr(view));
     }
     // at this point we should at least be good to go from the point_shader perspective.
-    \
 
     for (auto& attractor:  compute_attractors) {
         attractor.x = (rand() % 500) / 30.0 - (rand() % 500) / 30.0;
@@ -351,6 +358,15 @@ int main() {
     glBindBuffer    (GL_ARRAY_BUFFER, velocity_buffer);
     glBufferData    (GL_ARRAY_BUFFER, particle_count * sizeof(glm::vec4), compute_velocities.data(), GL_DYNAMIC_COPY);
 
+    // create VAO?
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+    glBindBuffer (GL_ARRAY_BUFFER, position_buffer);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+    glBindBuffer(GL_ARRAY_BUFFER, lifetime_buffer);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(float), 0);
 
 
     double dt = 0.0;

@@ -11,8 +11,10 @@
 #include <array>
 
 // window parameters
-const int window_width  = 1920;
-const int window_height = 1080;
+const int window_width = 3840;
+const int window_height = 2160;
+// const int window_width  = 1920;
+// const int window_height = 1080;
 const int gl_major_version = 4;
 const int gl_minor_version = 5;
 
@@ -33,9 +35,8 @@ const float camera_zoom_speed = 10.0f;
 
 // simulation
 const int particle_count = 6000000;
-const int random_count =  particle_count * 100;
+// const int particle_count = 1000;
 const int attractor_count = 8;
-const int world_size = 150;
 
 std::array<glm::vec4, particle_count>  compute_positions;
 std::array<float, particle_count>      compute_lifetimes;
@@ -166,6 +167,7 @@ static void simulate(
     uint32_t lifetime_buffer)
 {
     counter += dt;
+    fmt::print("dt: {}\n",dt);
     
     if (counter >= 1.0)
         counter = 0.0 - epsilon;
@@ -173,24 +175,29 @@ static void simulate(
     if (counter <= 0.0)
         fps = (int) 1.0 / dt;
 
-    // update the attractors.
 
+    // fixme: this should definitely not be the way. just create a uniform buffer that we update?
+    // update the attractors (to move the particles around/)    
 
-    //@FIXME: we do not update attractor positions at this time. I just want to see some points.
     glBindBuffer(GL_ARRAY_BUFFER, attractor_buffer);
     // modify gpu-based buffer, whatever was in there can be discarded.
-    glm::vec4* attractor_buffer_ptr = (glm::vec4*)glMapBufferRange(GL_ARRAY_BUFFER, 0, attractor_count*sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+    glm::vec4* attractor_buffer_ptr = (glm::vec4*)glMapBufferRange(GL_ARRAY_BUFFER, 0, attractor_count * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+    for (size_t idx = 0; idx < attractor_count; ++idx)
+    {
+        attractor_buffer_ptr[idx].x = (rand() % 100) / 500.0 - (rand() % 100) / 500.0;
+        attractor_buffer_ptr[idx].y = (rand() % 100) / 500.0 - (rand() % 100) / 500.0;
+        attractor_buffer_ptr[idx].z = (rand() % 100) / 500.0 - (rand() % 100) / 500.0;
 
-    for (size_t idx = 0; idx < attractor_count; ++idx) {
-        attractor_buffer_ptr[idx].x = sinf(counter) * (rand() % 500) / 10.0;
-        attractor_buffer_ptr[idx].y = cosf(counter) * (rand() % 500) / 10.0;
+        attractor_buffer_ptr[idx].x *= sinf(counter);
+        attractor_buffer_ptr[idx].y *= cosf(counter);
         attractor_buffer_ptr[idx].z = tanf(counter);
+
+        // attractor_buffer_ptr[idx].x = sinf(counter) * (rand() % 500) / 10.0;
+        // attractor_buffer_ptr[idx].y = cosf(counter) * (rand() % 500) / 10.0;
+        // attractor_buffer_ptr[idx].z = tanf(counter);
     }
     glUnmapBuffer(GL_ARRAY_BUFFER);
 
-
-    //@FIXME(SMIA): I think that you only actually need to do this once.
-    // COMPUTE SHADER!!!!!!
     {
         glDisable(GL_CULL_FACE);
         glUseProgram(compute_shader_id);
@@ -204,16 +211,8 @@ static void simulate(
         glDispatchCompute(particle_count / workgroup_size, 1, 1);
         glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glUseProgram(0);
-
-        //@debug: read back data from the shader.
-        // glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
-        // glm::vec3* gpu_buffer_ptr = (glm::vec3*)glMapBuffer(GL_ARRAY_BUFFER, GL_READ_ONLY);
-        // for (size_t idx = 0; idx != particle_count; ++idx)
-        // {
-        //     fmt::print("vec3: {}, {} {}\n", gpu_buffer_ptr[idx].x, gpu_buffer_ptr[idx].y, gpu_buffer_ptr[idx].z);
-        // }
-        glUnmapBuffer(GL_ARRAY_BUFFER);
     }
+
     //@TODO: does the simulation not actually update the position_buffer?
     // or the lifetime buffer?
     // check before and after!
@@ -223,6 +222,7 @@ static void simulate(
         glBindBuffer (GL_ARRAY_BUFFER, position_buffer);
         // default VAO?
         glBindVertexArray(VAO);
+        glPointSize(2.0);
         glDrawArrays(GL_POINTS, 0, particle_count);
     }
 
@@ -279,7 +279,7 @@ int main() {
         }
 
         // enable vsync
-        glfwSwapInterval(1);
+        // glfwSwapInterval(1);
     }
 
     // gl init 
@@ -372,8 +372,7 @@ int main() {
     double dt = 0.0;
     while (!glfwWindowShouldClose(window))
     {
-
-
+        glClear(GL_COLOR_BUFFER_BIT);
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
 
@@ -390,8 +389,8 @@ int main() {
 
         dt = new_dt;
 
-
         glfwSwapBuffers(window);
+
         glfwPollEvents();
     }
 
